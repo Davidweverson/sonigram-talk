@@ -29,34 +29,105 @@ export interface TypingIndicator {
   user?: User;
 }
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       users: {
-        Row: User;
-        Insert: Omit<User, 'created_at'>;
-        Update: Partial<Omit<User, 'id'>>;
+        Row: {
+          id: string;
+          username: string;
+          avatar_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          username: string;
+          avatar_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          username?: string;
+          avatar_url?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       rooms: {
-        Row: Room;
-        Insert: Omit<Room, 'id' | 'created_at'>;
-        Update: Partial<Omit<Room, 'id'>>;
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          icon: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          icon?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          icon?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       messages: {
-        Row: Message;
-        Insert: Omit<Message, 'id' | 'created_at' | 'user'>;
-        Update: Partial<Omit<Message, 'id' | 'user'>>;
+        Row: {
+          id: string;
+          room_id: string;
+          user_id: string;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          user_id: string;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          user_id?: string;
+          content?: string;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       typing_indicators: {
-        Row: TypingIndicator;
-        Insert: Omit<TypingIndicator, 'updated_at' | 'user'>;
-        Update: Partial<Omit<TypingIndicator, 'user'>>;
+        Row: {
+          room_id: string;
+          user_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          room_id: string;
+          user_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          room_id?: string;
+          user_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
-}
+};
 
-export const DEFAULT_ROOMS: Omit<Room, 'id' | 'created_at'>[] = [
+export const DEFAULT_ROOMS: { name: string; description: string; icon: string }[] = [
   { name: 'Global', description: 'Converse com todos', icon: '🌍' },
   { name: 'Música', description: 'Para os amantes de música', icon: '🎵' },
   { name: 'Games', description: 'Jogos e diversão', icon: '🎮' },

@@ -30,9 +30,14 @@ export function OnboardingScreen({ onLogin }: OnboardingScreenProps) {
 
     setLoading(true);
     setError('');
-    const result = await onLogin(trimmed);
-    if (result.error) {
-      setError(result.error);
+    try {
+      const result = await onLogin(trimmed);
+      if (result.error) {
+        setError(result.error);
+      }
+    } catch {
+      setError('Não foi possível entrar agora. Tente novamente.');
+    } finally {
       setLoading(false);
     }
   };

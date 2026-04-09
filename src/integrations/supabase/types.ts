@@ -14,29 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
+      direct_messages: {
+        Row: {
+          created_at: string
+          id: string
+          user1_id: string
+          user2_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user1_id: string
+          user2_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user1_id?: string
+          user2_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "direct_messages_user1_id_fkey"
+            columns: ["user1_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "direct_messages_user2_id_fkey"
+            columns: ["user2_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      friendships: {
+        Row: {
+          created_at: string
+          id: string
+          receiver_id: string
+          requester_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          receiver_id: string
+          requester_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          receiver_id?: string
+          requester_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
           created_at: string | null
+          edited_at: string | null
           id: string
+          media_type: string | null
+          media_url: string | null
+          reply_to_id: string | null
           room_id: string
           user_id: string
         }
         Insert: {
           content: string
           created_at?: string | null
+          edited_at?: string | null
           id?: string
+          media_type?: string | null
+          media_url?: string | null
+          reply_to_id?: string | null
           room_id: string
           user_id: string
         }
         Update: {
           content?: string
           created_at?: string | null
+          edited_at?: string | null
           id?: string
+          media_type?: string | null
+          media_url?: string | null
+          reply_to_id?: string | null
           room_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_room_id_fkey"
             columns: ["room_id"]
@@ -53,6 +147,55 @@ export type Database = {
           },
         ]
       }
+      reports: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string | null
+          reason: string
+          reported_user_id: string
+          reporter_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          reason: string
+          reported_user_id: string
+          reporter_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          reason?: string
+          reported_user_id?: string
+          reporter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reported_user_id_fkey"
+            columns: ["reported_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           created_at: string | null
@@ -60,6 +203,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          read_only: boolean
         }
         Insert: {
           created_at?: string | null
@@ -67,6 +211,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          read_only?: boolean
         }
         Update: {
           created_at?: string | null
@@ -74,6 +219,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          read_only?: boolean
         }
         Relationships: []
       }
@@ -113,20 +259,35 @@ export type Database = {
       users: {
         Row: {
           avatar_url: string | null
+          bio: string | null
           created_at: string | null
+          friend_code: string
           id: string
+          is_banned: boolean
+          is_muted: boolean
+          role: string
           username: string
         }
         Insert: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
+          friend_code?: string
           id: string
+          is_banned?: boolean
+          is_muted?: boolean
+          role?: string
           username: string
         }
         Update: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
+          friend_code?: string
           id?: string
+          is_banned?: boolean
+          is_muted?: boolean
+          role?: string
           username?: string
         }
         Relationships: []
@@ -136,7 +297,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_friend_code: { Args: never; Returns: string }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_user_banned: { Args: { _user_id: string }; Returns: boolean }
+      is_user_muted: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

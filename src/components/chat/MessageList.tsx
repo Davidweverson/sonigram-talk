@@ -10,6 +10,11 @@ interface MessageListProps {
   hasMore: boolean;
   onLoadMore: () => void;
   currentUserId: string;
+  isAdmin?: boolean;
+  onReply?: (message: MessageType) => void;
+  onEdit?: (message: MessageType) => void;
+  onDelete?: (messageId: string) => void;
+  onReport?: (message: MessageType) => void;
 }
 
 function isGrouped(msg: MessageType, prev: MessageType | undefined): boolean {
@@ -19,20 +24,31 @@ function isGrouped(msg: MessageType, prev: MessageType | undefined): boolean {
   return diff < 2 * 60 * 1000;
 }
 
-export function MessageList({ messages, loading, hasMore, onLoadMore, currentUserId }: MessageListProps) {
+export function MessageList({
+  messages, loading, hasMore, onLoadMore, currentUserId,
+  isAdmin, onReply, onEdit, onDelete, onReport
+}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [newCount, setNewCount] = useState(0);
+  const prevLenRef = useRef(messages.length);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setNewCount(0);
   }, []);
 
   useEffect(() => {
+    const added = messages.length - prevLenRef.current;
+    prevLenRef.current = messages.length;
+
     if (isNearBottom) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } else {
+      setNewCount(0);
+    } else if (added > 0) {
+      setNewCount((c) => c + added);
       setShowScrollButton(true);
     }
   }, [messages.length, isNearBottom]);
@@ -40,15 +56,10 @@ export function MessageList({ messages, loading, hasMore, onLoadMore, currentUse
   const handleScroll = () => {
     const el = containerRef.current;
     if (!el) return;
-
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
     setIsNearBottom(nearBottom);
-    if (nearBottom) setShowScrollButton(false);
-
-    // Load more at top
-    if (el.scrollTop < 50 && hasMore && !loading) {
-      onLoadMore();
-    }
+    if (nearBottom) { setShowScrollButton(false); setNewCount(0); }
+    if (el.scrollTop < 50 && hasMore && !loading) onLoadMore();
   };
 
   if (loading && messages.length === 0) {
@@ -69,11 +80,7 @@ export function MessageList({ messages, loading, hasMore, onLoadMore, currentUse
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        className="h-full overflow-y-auto scrollbar-thin py-4"
-      >
+      <div ref={containerRef} onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-thin py-4">
         {loading && hasMore && (
           <div className="flex justify-center py-4">
             <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -91,6 +98,11 @@ export function MessageList({ messages, loading, hasMore, onLoadMore, currentUse
             message={msg}
             isGrouped={isGrouped(msg, messages[i - 1])}
             isOwn={msg.user_id === currentUserId}
+            isAdmin={isAdmin}
+            onReply={onReply}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onReport={onReport}
           />
         ))}
         <div ref={bottomRef} />
@@ -102,7 +114,7 @@ export function MessageList({ messages, loading, hasMore, onLoadMore, currentUse
           className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-full px-4 py-2 text-sm text-primary flex items-center gap-1.5 hover:bg-muted/50 transition-all animate-fade-in glow-primary"
         >
           <ArrowDown className="h-4 w-4" />
-          Novas mensagens
+          {newCount > 0 ? `Novas mensagens (${newCount})` : 'Novas mensagens'}
         </button>
       )}
     </div>

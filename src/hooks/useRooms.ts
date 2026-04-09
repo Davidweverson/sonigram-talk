@@ -14,7 +14,7 @@ export function useRooms() {
         .order('created_at', { ascending: true });
 
       if (!error && data) {
-        setRooms(data);
+        setRooms(data as Room[]);
       }
       setLoading(false);
     };

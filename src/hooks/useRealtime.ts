@@ -20,16 +20,28 @@ export function useRealtime(roomId: string | null) {
       .eq('id', userId)
       .maybeSingle();
     if (data) {
-      usersCache.current.set(userId, data);
+      usersCache.current.set(userId, data as User);
     }
-    return data || undefined;
+    return (data as User) || undefined;
   }, []);
 
-  const fetchMessages = useCallback(async (roomId: string, before?: string) => {
+  const fetchReplyTo = useCallback(async (replyToId: string | null): Promise<Message | null> => {
+    if (!replyToId) return null;
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('id', replyToId)
+      .maybeSingle();
+    if (!data) return null;
+    const user = await fetchUser(data.user_id);
+    return { ...data, user, created_at: data.created_at || '' } as Message;
+  }, [fetchUser]);
+
+  const fetchMessages = useCallback(async (rid: string, before?: string) => {
     let query = supabase
       .from('messages')
       .select('*')
-      .eq('room_id', roomId)
+      .eq('room_id', rid)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE);
 
@@ -40,18 +52,17 @@ export function useRealtime(roomId: string | null) {
     const { data, error } = await query;
     if (error || !data) return [];
 
-    // Enrich with user data
     const enriched = await Promise.all(
-      data.map(async (msg) => ({
-        ...msg,
-        user: await fetchUser(msg.user_id),
-      }))
+      data.map(async (msg) => {
+        const user = await fetchUser(msg.user_id);
+        const reply_to = await fetchReplyTo(msg.reply_to_id);
+        return { ...msg, user, reply_to, created_at: msg.created_at || '' } as Message;
+      })
     );
 
     return enriched.reverse();
-  }, [fetchUser]);
+  }, [fetchUser, fetchReplyTo]);
 
-  // Load initial messages
   useEffect(() => {
     if (!roomId) {
       setMessages([]);
@@ -69,7 +80,6 @@ export function useRealtime(roomId: string | null) {
     });
   }, [roomId, fetchMessages]);
 
-  // Subscribe to realtime
   useEffect(() => {
     if (!roomId) return;
 
@@ -86,7 +96,37 @@ export function useRealtime(roomId: string | null) {
         async (payload) => {
           const newMsg = payload.new as Message;
           const user = await fetchUser(newMsg.user_id);
-          setMessages((prev) => [...prev, { ...newMsg, user }]);
+          const reply_to = await fetchReplyTo(newMsg.reply_to_id || null);
+          setMessages((prev) => [...prev, { ...newMsg, user, reply_to }]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${roomId}`,
+        },
+        async (payload) => {
+          const updated = payload.new as Message;
+          const user = await fetchUser(updated.user_id);
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...updated, user, reply_to: m.reply_to } : m))
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          const deleted = payload.old as { id: string };
+          setMessages((prev) => prev.filter((m) => m.id !== deleted.id));
         }
       )
       .subscribe();
@@ -94,7 +134,7 @@ export function useRealtime(roomId: string | null) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId, fetchUser]);
+  }, [roomId, fetchUser, fetchReplyTo]);
 
   const loadMore = useCallback(async () => {
     if (!roomId || !hasMore || loading) return;
@@ -109,16 +149,30 @@ export function useRealtime(roomId: string | null) {
   }, [roomId, hasMore, loading, messages, fetchMessages]);
 
   const sendMessage = useCallback(
-    async (content: string, userId: string) => {
+    async (content: string, userId: string, replyToId?: string, mediaUrl?: string, mediaType?: string) => {
       if (!roomId) return;
       await supabase.from('messages').insert({
         room_id: roomId,
         user_id: userId,
         content: content.trim(),
+        reply_to_id: replyToId || null,
+        media_url: mediaUrl || null,
+        media_type: mediaType || null,
       });
     },
     [roomId]
   );
 
-  return { messages, loading, hasMore, loadMore, sendMessage };
+  const editMessage = useCallback(async (messageId: string, newContent: string) => {
+    await supabase
+      .from('messages')
+      .update({ content: newContent, edited_at: new Date().toISOString() })
+      .eq('id', messageId);
+  }, []);
+
+  const deleteMessage = useCallback(async (messageId: string) => {
+    await supabase.from('messages').delete().eq('id', messageId);
+  }, []);
+
+  return { messages, loading, hasMore, loadMore, sendMessage, editMessage, deleteMessage };
 }

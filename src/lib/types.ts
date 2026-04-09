@@ -3,6 +3,11 @@ export interface User {
   username: string;
   avatar_url: string | null;
   created_at: string;
+  role?: string;
+  is_muted?: boolean;
+  is_banned?: boolean;
+  bio?: string | null;
+  friend_code?: string;
 }
 
 export interface Room {
@@ -11,6 +16,7 @@ export interface Room {
   description: string | null;
   icon: string | null;
   created_at: string;
+  read_only?: boolean;
 }
 
 export interface Message {
@@ -19,7 +25,12 @@ export interface Message {
   user_id: string;
   content: string;
   created_at: string;
+  reply_to_id?: string | null;
+  edited_at?: string | null;
+  media_url?: string | null;
+  media_type?: string | null;
   user?: User;
+  reply_to?: Message | null;
 }
 
 export interface TypingIndicator {
@@ -29,103 +40,35 @@ export interface TypingIndicator {
   user?: User;
 }
 
-export type Database = {
-  public: {
-    Tables: {
-      users: {
-        Row: {
-          id: string;
-          username: string;
-          avatar_url: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id: string;
-          username: string;
-          avatar_url?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          username?: string;
-          avatar_url?: string | null;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      rooms: {
-        Row: {
-          id: string;
-          name: string;
-          description: string | null;
-          icon: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          description?: string | null;
-          icon?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          name?: string;
-          description?: string | null;
-          icon?: string | null;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      messages: {
-        Row: {
-          id: string;
-          room_id: string;
-          user_id: string;
-          content: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          room_id: string;
-          user_id: string;
-          content: string;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          room_id?: string;
-          user_id?: string;
-          content?: string;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      typing_indicators: {
-        Row: {
-          room_id: string;
-          user_id: string;
-          updated_at: string;
-        };
-        Insert: {
-          room_id: string;
-          user_id: string;
-          updated_at?: string;
-        };
-        Update: {
-          room_id?: string;
-          user_id?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-};
+export interface Friendship {
+  id: string;
+  requester_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  requester?: User;
+  receiver?: User;
+}
+
+export interface DirectMessage {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  created_at: string;
+  other_user?: User;
+}
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  reported_user_id: string;
+  message_id: string | null;
+  reason: string;
+  created_at: string;
+  reporter?: User;
+  reported_user?: User;
+  message?: Message;
+}
 
 export const DEFAULT_ROOMS: { name: string; description: string; icon: string }[] = [
   { name: 'Global', description: 'Converse com todos', icon: '🌍' },

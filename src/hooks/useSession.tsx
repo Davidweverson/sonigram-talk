@@ -10,250 +10,187 @@ import {
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/types';
 
-const SESSION_KEY = 'sonigram_session';
-
-interface SessionData {
-  userId: string;
-  username: string;
-  avatar_url: string | null;
-}
-
 interface SessionContextValue {
   user: User | null;
   loading: boolean;
-  login: (username: string, avatarUrl?: string | null) => Promise<{ error?: string }>;
+  login: (email: string, password: string) => Promise<{ error?: string }>;
+  signup: (email: string, password: string, username: string) => Promise<{ error?: string }>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
+  updatePassword: (password: string) => Promise<{ error?: string }>;
+  updateProfile: (updates: Partial<Pick<User, 'username' | 'avatar_url' | 'bio'>>) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
 
-function toUser(session: SessionData, createdAt = ''): User {
-  return {
-    id: session.userId,
-    username: session.username,
-    avatar_url: session.avatar_url,
-    created_at: createdAt,
-  };
-}
-
-function toSessionData(user: Pick<User, 'id' | 'username' | 'avatar_url'>): SessionData {
-  return {
-    userId: user.id,
-    username: user.username,
-    avatar_url: user.avatar_url,
-  };
-}
-
-function readStoredSession(): SessionData | null {
-  try {
-    const stored = localStorage.getItem(SESSION_KEY);
-    if (!stored) return null;
-    return JSON.parse(stored) as SessionData;
-  } catch {
-    localStorage.removeItem(SESSION_KEY);
-    return null;
-  }
-}
-
-function persistSession(session: SessionData) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
-
-function clearStoredSession() {
-  localStorage.removeItem(SESSION_KEY);
-}
-
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const syncUserFromAuth = useCallback(async (authUserId: string | null) => {
-    const stored = readStoredSession();
-
-    if (stored && (!authUserId || stored.userId === authUserId)) {
-      setUser(toUser(stored));
-      return;
-    }
-
-    if (stored && authUserId && stored.userId !== authUserId) {
-      clearStoredSession();
-    }
-
-    if (!authUserId) {
-      setUser(null);
-      return;
-    }
-
+  const fetchProfile = useCallback(async (userId: string): Promise<User | null> => {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('id', authUserId)
+      .eq('id', userId)
       .maybeSingle();
-
-    if (error) {
-      console.error('Erro ao restaurar perfil do usuário.', error);
-      setUser(null);
-      return;
-    }
-
-    if (!data) {
-      setUser(null);
-      return;
-    }
-
-    persistSession(toSessionData(data));
-    setUser({
-      id: data.id,
-      username: data.username,
-      avatar_url: data.avatar_url,
-      created_at: data.created_at ?? '',
-    });
+    if (error || !data) return null;
+    return data as User;
   }, []);
 
   useEffect(() => {
     let isMounted = true;
 
-    const initializeSession = async () => {
-      const stored = readStoredSession();
-
-      if (stored && isMounted) {
-        setUser(toUser(stored));
-      }
-
+    const init = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error('Erro ao inicializar sessão do Supabase.', error);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isMounted) {
+          const profile = await fetchProfile(session.user.id);
+          if (isMounted) setUser(profile);
         }
-
-        if (!isMounted) {
-          return;
-        }
-
-        await syncUserFromAuth(data.session?.user?.id ?? null);
-      } catch (error) {
-        console.error('Falha inesperada ao restaurar a sessão.', error);
+      } catch (e) {
+        console.error('Erro ao restaurar sessão.', e);
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
-    void initializeSession();
+    void init();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) {
-        return;
-      }
-
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
       if (event === 'SIGNED_OUT') {
-        clearStoredSession();
         setUser(null);
         return;
       }
-
       if (session?.user) {
-        void syncUserFromAuth(session.user.id);
-        return;
+        const profile = await fetchProfile(session.user.id);
+        if (isMounted) setUser(profile);
       }
-
-      const stored = readStoredSession();
-      setUser(stored ? toUser(stored) : null);
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [syncUserFromAuth]);
+  }, [fetchProfile]);
 
-  const login = useCallback(async (username: string, avatarUrl?: string | null): Promise<{ error?: string }> => {
+  const signup = useCallback(async (email: string, password: string, username: string): Promise<{ error?: string }> => {
     try {
-      const normalizedUsername = username.trim();
+      const trimmed = username.trim();
 
-      const { data: existing, error: existingError } = await supabase
+      // Check username availability
+      const { data: existing } = await supabase
         .from('users')
-        .select('*')
-        .eq('username', normalizedUsername)
+        .select('id')
+        .eq('username', trimmed)
         .maybeSingle();
 
-      if (existingError) {
-        console.error('Erro ao verificar o nome de usuário.', existingError);
-        return { error: 'Erro ao verificar o nome de usuário. Tente novamente.' };
+      if (existing) return { error: 'Nome de usuário já está em uso.' };
+
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          return { error: 'Este email já está cadastrado.' };
+        }
+        return { error: authError.message };
       }
 
-      if (existing) {
-        persistSession(toSessionData(existing));
-        setUser({
-          id: existing.id,
-          username: existing.username,
-          avatar_url: existing.avatar_url,
-          created_at: existing.created_at ?? '',
-        });
-        return {};
-      }
+      if (!authData.user) return { error: 'Erro ao criar conta.' };
 
-      const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
-
-      if (authError || !authData.user) {
-        console.error('Erro ao criar sessão anônima.', authError);
-        return { error: 'Erro ao criar conta. Tente novamente.' };
-      }
-
-      const newUser: User = {
+      const { error: insertError } = await supabase.from('users').insert({
         id: authData.user.id,
-        username: normalizedUsername,
-        avatar_url: avatarUrl || null,
-        created_at: new Date().toISOString(),
-      };
-
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          id: newUser.id,
-          username: newUser.username,
-          avatar_url: newUser.avatar_url,
-        });
+        username: trimmed,
+        avatar_url: null,
+      });
 
       if (insertError) {
-        if (insertError.code === '23505') {
-          return { error: 'Nome de usuário já está em uso.' };
-        }
-
-        console.error('Erro ao criar perfil.', insertError);
-        return { error: 'Erro ao criar perfil. Tente novamente.' };
+        if (insertError.code === '23505') return { error: 'Nome de usuário já está em uso.' };
+        return { error: 'Erro ao criar perfil.' };
       }
 
-      persistSession(toSessionData(newUser));
-      setUser(newUser);
+      const profile = await fetchProfile(authData.user.id);
+      if (profile) setUser(profile);
       return {};
-    } catch (error) {
-      console.error('Falha inesperada ao iniciar sessão.', error);
-      return { error: 'Não foi possível entrar agora. Tente novamente.' };
+    } catch {
+      return { error: 'Erro inesperado. Tente novamente.' };
+    }
+  }, [fetchProfile]);
+
+  const login = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.includes('Invalid login')) {
+          return { error: 'Email ou senha incorretos.' };
+        }
+        return { error: error.message };
+      }
+      if (!data.user) return { error: 'Erro ao entrar.' };
+
+      const profile = await fetchProfile(data.user.id);
+      if (profile?.is_banned) {
+        await supabase.auth.signOut();
+        return { error: 'Sua conta foi banida.' };
+      }
+      if (profile) setUser(profile);
+      return {};
+    } catch {
+      return { error: 'Erro inesperado. Tente novamente.' };
+    }
+  }, [fetchProfile]);
+
+  const resetPassword = useCallback(async (email: string): Promise<{ error?: string }> => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) return { error: error.message };
+      return {};
+    } catch {
+      return { error: 'Erro ao enviar email de recuperação.' };
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    clearStoredSession();
-    setUser(null);
+  const updatePassword = useCallback(async (password: string): Promise<{ error?: string }> => {
     try {
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        console.error('Erro ao encerrar sessão.', error);
-      }
-    } catch (error) {
-      console.error('Falha inesperada ao sair.', error);
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) return { error: error.message };
+      return {};
+    } catch {
+      return { error: 'Erro ao atualizar senha.' };
     }
+  }, []);
+
+  const updateProfile = useCallback(async (updates: Partial<Pick<User, 'username' | 'avatar_url' | 'bio'>>): Promise<{ error?: string }> => {
+    if (!user) return { error: 'Não autenticado.' };
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', user.id);
+      if (error) {
+        if (error.code === '23505') return { error: 'Nome de usuário já está em uso.' };
+        return { error: 'Erro ao atualizar perfil.' };
+      }
+      setUser(prev => prev ? { ...prev, ...updates } : null);
+      return {};
+    } catch {
+      return { error: 'Erro inesperado.' };
+    }
+  }, [user]);
+
+  const logout = useCallback(async () => {
+    setUser(null);
+    await supabase.auth.signOut();
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout }),
-    [user, loading, login, logout]
+    () => ({ user, loading, login, signup, resetPassword, updatePassword, updateProfile, logout }),
+    [user, loading, login, signup, resetPassword, updatePassword, updateProfile, logout]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -261,10 +198,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 export function useSession() {
   const context = useContext(SessionContext);
-
-  if (!context) {
-    throw new Error('useSession deve ser usado dentro de SessionProvider.');
-  }
-
+  if (!context) throw new Error('useSession deve ser usado dentro de SessionProvider.');
   return context;
 }

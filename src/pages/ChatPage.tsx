@@ -3,17 +3,15 @@ import { useSession } from '@/hooks/useSession';
 import { useRooms } from '@/hooks/useRooms';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useTyping } from '@/hooks/useTyping';
-import { OnboardingScreen } from '@/components/chat/OnboardingScreen';
 import { ChatSidebar } from '@/components/chat/ChatSidebar';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { Menu, LogOut, X } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ChatPage() {
-  const { user, loading: sessionLoading, login, logout } = useSession();
+  const { user, logout } = useSession();
   const { rooms, loading: roomsLoading } = useRooms();
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -36,21 +34,12 @@ export default function ChatPage() {
     [user, sendMessage, stopTyping]
   );
 
-  // Loading
-  if (sessionLoading) {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">Carregando…</p>
-        </div>
+        <p className="text-muted-foreground text-sm">Redirecionando…</p>
       </div>
     );
-  }
-
-  // Onboarding
-  if (!user) {
-    return <OnboardingScreen onLogin={login} />;
   }
 
   return (
